@@ -75,7 +75,7 @@
             
             <div id="modalBody" class="space-y-3">
                 <input type="text" id="modalInputText" placeholder="ชื่อรายการ..." class="w-full px-3 py-2 border-2 border-slate-300 rounded-lg text-sm text-slate-800 font-medium focus:outline-none focus:border-slate-800">
-                <input type="number" id="modalInputNumber" placeholder="จำนวนทั้งหมด (ช่องที่ 5)" min="0" class="hidden w-full px-3 py-2 border-2 border-slate-300 rounded-lg text-sm text-slate-800 font-medium focus:outline-none focus:border-slate-800">
+                <input type="number" id="modalInputNumber" placeholder="จำนวนทั้งหมด" min="0" class="hidden w-full px-3 py-2 border-2 border-slate-300 rounded-lg text-sm text-slate-800 font-medium focus:outline-none focus:border-slate-800">
             </div>
 
             <div class="grid grid-cols-2 gap-2 pt-2">
@@ -90,7 +90,7 @@
         let currentUser = null;
         let areas = [];
 
-        let currentModalTarget = null; // 'area', 'editArea', 'defect', 'editDefect'
+        let currentModalTarget = null;
         let selectedAreaId = null;
         let selectedDefectId = null;
 
@@ -102,6 +102,11 @@
                 showLogin();
             }
         });
+
+        function showLogin() {
+            document.getElementById('loginView').classList.remove('hidden');
+            document.getElementById('appView').classList.add('hidden');
+        }
 
         // Login / User Isolation
         function handleLogin() {
@@ -130,8 +135,7 @@
                 localStorage.removeItem("COUNT_DEFECT_CURRENT_USER");
                 currentUser = null;
                 areas = [];
-                document.getElementById('loginView').classList.remove('hidden');
-                document.getElementById('appView').classList.add('hidden');
+                showLogin();
                 document.getElementById('usernameInput').value = '';
             }
         }
@@ -161,8 +165,10 @@
             }
 
             areas.forEach(area => {
-                const totalDefectCategories = area.defects.length; // ช่องที่ 2
-                const totalCompletedSum = area.defects.reduce((sum, d) => sum + d.completed, 0); // ช่องที่ 3
+                // คำนวณ ช่องที่ 2: รวมจำนวนทั้งหมดของหัวข้อย่อย
+                const totalSum = area.defects.reduce((sum, d) => sum + d.total, 0); 
+                // คำนวณ ช่องที่ 3: รวมจำนวนเก็บแล้วทั้งหมด
+                const totalCompletedSum = area.defects.reduce((sum, d) => sum + d.completed, 0); 
 
                 const areaCard = document.createElement('div');
                 areaCard.className = "bg-white border-2 border-slate-900 rounded-xl overflow-hidden shadow-sm";
@@ -175,12 +181,12 @@
                             <div class="col-span-6 border-2 border-slate-800 rounded-md p-1.5 flex items-center justify-center bg-slate-50 text-xs truncate">
                                 ${area.name}
                             </div>
-                            <!-- ช่องที่ 2: รวมจำนวนหัวข้อ -->
+                            <!-- ช่องที่ 2: รวมจำนวนทั้งหมด (จากช่องที่ 5 ของหัวข้อย่อย) -->
                             <div class="col-span-3 border-2 border-slate-800 rounded-md p-1.5 flex flex-col justify-center items-center bg-slate-50 text-xs">
-                                <span class="text-[10px] text-slate-500 font-normal">หัวข้อ</span>
-                                <span>${totalDefectCategories}</span>
+                                <span class="text-[10px] text-slate-500 font-normal">ทั้งหมด</span>
+                                <span>${totalSum}</span>
                             </div>
-                            <!-- ช่องที่ 3: รวมเก็บแล้วทั้งหมด -->
+                            <!-- ช่องที่ 3: รวมเก็บแล้วทั้งหมด (จากช่องที่ 6 ของหัวข้อย่อย) -->
                             <div class="col-span-3 border-2 border-slate-800 rounded-md p-1.5 flex flex-col justify-center items-center bg-slate-50 text-xs text-emerald-600">
                                 <span class="text-[10px] text-slate-500 font-normal">เก็บแล้ว</span>
                                 <span>${totalCompletedSum}</span>
@@ -212,7 +218,7 @@
                     </div>
                 `;
 
-                // Expanded Content (รายการ ช่องที่ 4, 5, 6, 7)
+                // Expanded Content (รายการย่อย ช่องที่ 4, 5, 6, 7)
                 let defectsHtml = '';
                 if (area.isExpanded) {
                     if (area.defects.length === 0) {
@@ -220,7 +226,7 @@
                     } else {
                         defectsHtml = `<div class="p-3 space-y-3 bg-slate-50">`;
                         area.defects.forEach(defect => {
-                            const remaining = Math.max(0, defect.total - defect.completed); // ช่องที่ 7
+                            const remaining = Math.max(0, defect.total - defect.completed);
 
                             defectsHtml += `
                                 <div class="bg-white border-2 border-slate-800 rounded-lg p-3 space-y-2">
@@ -252,9 +258,9 @@
                                         </div>
                                     </div>
 
-                                    <!-- Action Row (ใต้ ช่องที่ 5, 6, 7) -->
+                                    <!-- Action Row -->
                                     <div class="grid grid-cols-3 gap-2 text-center pt-1 items-center">
-                                        <!-- ใต้ช่องที่ 5: ปุ่มแก้ไข/ลบ -->
+                                        <!-- ปุ่มแก้ไข/ลบ -->
                                         <div class="flex items-center justify-center space-x-2">
                                             <button onclick="openModal('editDefect', ${area.id}, ${defect.id})" class="text-slate-700 hover:text-slate-900">
                                                 <i data-lucide="pencil" class="w-4 h-4 stroke-[2.5]"></i>
@@ -264,7 +270,7 @@
                                             </button>
                                         </div>
 
-                                        <!-- ใต้ช่องที่ 6: ปุ่ม + เพิ่มจำนวนเก็บแล้ว -->
+                                        <!-- ปุ่ม + เพิ่มจำนวนเก็บแล้ว -->
                                         <div class="flex justify-center">
                                             <button onclick="incrementCompleted(${area.id}, ${defect.id})" 
                                                 class="w-8 h-8 rounded-full border-2 border-slate-900 bg-white hover:bg-slate-100 flex items-center justify-center active:scale-95 transition">
@@ -272,7 +278,7 @@
                                             </button>
                                         </div>
 
-                                        <!-- ใต้ช่องที่ 7: ปุ่ม - ลดจำนวนเก็บแล้ว (เพิ่มคงเหลือ) -->
+                                        <!-- ปุ่ม - ลดจำนวนเก็บแล้ว -->
                                         <div class="flex justify-center">
                                             <button onclick="decrementCompleted(${area.id}, ${defect.id})" 
                                                 class="w-8 h-8 rounded-full border-2 border-slate-900 bg-white hover:bg-slate-100 flex items-center justify-center active:scale-95 transition">
@@ -320,12 +326,11 @@
             }
         }
 
-        // Calculation Rules (ช่องที่ 5, 6, 7)
+        // Calculation Rules
         function incrementCompleted(areaId, defectId) {
             const area = areas.find(a => a.id === areaId);
             const defect = area ? area.defects.find(d => d.id === defectId) : null;
             if (defect) {
-                // เพิ่มเก็บแล้วได้ไม่เกินจำนวนทั้งหมด (ช่องที่ 5)
                 if (defect.completed < defect.total) {
                     defect.completed += 1;
                     render();
@@ -337,7 +342,6 @@
             const area = areas.find(a => a.id === areaId);
             const defect = area ? area.defects.find(d => d.id === defectId) : null;
             if (defect) {
-                // ลดเก็บแล้วได้ไม่เกิน 0
                 if (defect.completed > 0) {
                     defect.completed -= 1;
                     render();
@@ -361,7 +365,7 @@
             inputNum.classList.add('hidden');
 
             if (target === 'area') {
-                title.innerText = "เพิ่มพื้นที่ใหม่ (ช่องที่ 1)";
+                title.innerText = "เพิ่มพื้นที่ใหม่";
             } else if (target === 'editArea') {
                 const area = areas.find(a => a.id === areaId);
                 title.innerText = "แก้ไขชื่อพื้นที่";
