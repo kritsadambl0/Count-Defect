@@ -16,7 +16,7 @@
         body { -webkit-tap-highlight-color: transparent; }
     </style>
 </head>
-<body class="bg-slate-100 text-slate-800 font-sans antialiased min-h-screen selection:bg-slate-800 selection:text-white">
+<body class="bg-slate-100 text-slate-800 font-sans antialiased min-h-screen">
 
     <!-- View 0: LOGIN SCREEN -->
     <div id="loginView" class="min-h-screen flex flex-col items-center justify-center p-6 bg-white">
@@ -26,7 +26,6 @@
             
             <div class="space-y-4 pt-4">
                 <input type="text" id="usernameInput" placeholder="USERNAME" 
-                    onkeydown="if(event.key==='Enter') handleLogin()"
                     class="w-full px-4 py-3 text-center border-2 border-slate-800 rounded-lg text-lg font-semibold placeholder:text-slate-400 uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-slate-800">
                 
                 <button onclick="handleLogin()" 
@@ -34,28 +33,25 @@
                     <i data-lucide="check" class="w-8 h-8 text-slate-900 stroke-[3]"></i>
                 </button>
             </div>
-            
-            <p class="text-xs text-slate-400">เข้าใช้งานด้วย Username เดียวกันในอุปกรณ์อื่นเพื่อซิงค์ข้อมูลสด</p>
         </div>
     </div>
 
     <!-- View 1: HOME SCREEN -->
     <div id="appView" class="hidden min-h-screen flex flex-col">
         <!-- Header -->
-        <header class="bg-white border-b-2 border-slate-800 sticky top-0 z-30 px-4 py-3 shadow-xs">
+        <header class="bg-white border-b border-slate-200 sticky top-0 z-30 px-4 py-3">
             <div class="max-w-md mx-auto flex justify-between items-center">
                 <div class="flex items-center space-x-2">
                     <h1 class="text-lg font-black tracking-wider text-slate-900">COUNT DEFECT</h1>
-                    <!-- Cloud Sync Status Badge -->
-                    <span id="cloudStatus" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500">
-                        <span id="cloudDot" class="w-1.5 h-1.5 rounded-full bg-slate-400 mr-1.5 animate-pulse"></span>
-                        <span id="cloudText">กำลังเชื่อมต่อ...</span>
+                    <!-- Status Badge -->
+                    <span id="syncStatusBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-medium border border-slate-200">
+                        พร้อมใช้งาน
                     </span>
                 </div>
                 
                 <!-- Top Right: User Account Profile -->
-                <button onclick="handleLogout()" title="ออกจากระบบ" class="flex items-center space-x-1.5 text-xs font-bold text-slate-700 hover:text-rose-600 transition bg-slate-100 px-2.5 py-1.5 rounded-lg border border-slate-300 active:scale-95">
-                    <i data-lucide="user" class="w-4 h-4"></i>
+                <button onclick="handleLogout()" class="flex items-center space-x-1.5 text-xs font-bold text-slate-700 hover:text-rose-600 transition">
+                    <i data-lucide="user-circle-2" class="w-6 h-6"></i>
                     <span id="displayUsername" class="uppercase">USERNAME</span>
                 </button>
             </div>
@@ -66,7 +62,7 @@
             <!-- Home Title & Add Area Button -->
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-2xl font-black tracking-wider text-slate-900">HOME</h2>
-                <button onclick="openModal('area')" title="เพิ่มพื้นที่ใหม่" class="p-1 hover:bg-slate-200 rounded-lg transition active:scale-95">
+                <button onclick="openModal('area')" class="p-1 hover:bg-slate-200 rounded-lg transition active:scale-95">
                     <i data-lucide="plus" class="w-8 h-8 text-slate-900 stroke-[2.5]"></i>
                 </button>
             </div>
@@ -95,183 +91,146 @@
         </div>
     </div>
 
-    <!-- Firebase Cloud Sync Script Module -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    <script>
+        // State Management
+        let currentUser = null;
+        let areas = [];
+        let syncInterval = null;
+        let isSyncing = false;
 
-        // Global Variables Provided by Container or Fallback
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'count-defect-app';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' 
-            ? JSON.parse(__firebase_config) 
-            : {
-                apiKey: "AIzaSyDemoKeyOnlyForFallback",
-                authDomain: "count-defect.firebaseapp.com",
-                projectId: "count-defect",
-                storageBucket: "count-defect.appspot.com",
-                messagingSenderId: "123456789",
-                appId: "1:123456789:web:123456789"
-            };
+        let currentModalTarget = null;
+        let selectedAreaId = null;
+        let selectedDefectId = null;
 
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+        // Firebase Realtime DB REST Endpoint (Fast Asia-pacific node)
+        const getCloudUrl = (user) => {
+            const cleanUser = user.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+            return `https://count-defect-app-default-rtdb.asia-southeast1.firebasedatabase.app/users/${cleanUser}.json`;
+        };
 
-        // Application State
-        window.currentUser = null;
-        window.areas = [];
-        window.unsubscribeSnapshot = null;
-        window.db = db;
-        window.appId = appId;
-
-        // Modal State
-        window.currentModalTarget = null;
-        window.selectedAreaId = null;
-        window.selectedDefectId = null;
-
-        // Authenticate Firebase user on load
-        async function initAuth() {
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (err) {
-                console.warn("Auth token failed, falling back to anonymous auth:", err);
-                try {
-                    await signInAnonymously(auth);
-                } catch (e) {
-                    console.error("Firebase Auth failed:", e);
-                }
-            }
-        }
-
-        // Handle Auth state change
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                const savedUser = localStorage.getItem("COUNT_DEFECT_CURRENT_USER");
-                if (savedUser) {
-                    window.loginAs(savedUser);
-                } else {
-                    window.showLogin();
-                }
+        // Initialize App
+        document.addEventListener("DOMContentLoaded", () => {
+            const savedUser = localStorage.getItem("COUNT_DEFECT_CURRENT_USER");
+            if (savedUser) {
+                // Auto Login immediately from local cache
+                loginAs(savedUser);
+            } else {
+                showLogin();
             }
         });
 
-        initAuth();
-
-        // Connect and Listen to User Document on Cloud Realtime Firestore
-        window.subscribeToCloud = function(username) {
-            if (window.unsubscribeSnapshot) {
-                window.unsubscribeSnapshot();
-            }
-
-            const cloudText = document.getElementById('cloudText');
-            const cloudDot = document.getElementById('cloudDot');
-            
-            if (cloudText && cloudDot) {
-                cloudText.innerText = "กำลังเชื่อมต่อ...";
-                cloudDot.className = "w-1.5 h-1.5 rounded-full bg-amber-400 mr-1.5 animate-ping";
-            }
-
-            // Path: /artifacts/{appId}/public/data/defect_users/{username}
-            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'defect_users', username);
-
-            window.unsubscribeSnapshot = onSnapshot(docRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    const cloudData = docSnap.data();
-                    const remoteAreas = cloudData.areas || [];
-                    
-                    // Merge local state (e.g. preserves card expand toggles) with cloud data
-                    window.areas = remoteAreas.map(remoteArea => {
-                        const existing = window.areas.find(a => a.id === remoteArea.id);
-                        return {
-                            ...remoteArea,
-                            isExpanded: existing ? existing.isExpanded : (remoteArea.isExpanded ?? true)
-                        };
-                    });
-                } else {
-                    // New user document on cloud
-                    window.areas = [];
-                    window.saveToCloud(); // Initialize document
-                }
-
-                if (cloudText && cloudDot) {
-                    cloudText.innerText = "เรียลไทม์สด";
-                    cloudDot.className = "w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5";
-                }
-
-                window.render();
-            }, (error) => {
-                console.error("Cloud Sync Error:", error);
-                if (cloudText && cloudDot) {
-                    cloudText.innerText = "หลุดการเชื่อมต่อ";
-                    cloudDot.className = "w-1.5 h-1.5 rounded-full bg-rose-500 mr-1.5";
-                }
-            });
-        };
-
-        // Write data to Firestore Cloud
-        window.saveToCloud = async function() {
-            if (!window.currentUser) return;
-
-            const docRef = doc(db, 'artifacts', window.appId, 'public', 'data', 'defect_users', window.currentUser);
-            try {
-                await setDoc(docRef, {
-                    username: window.currentUser,
-                    areas: window.areas,
-                    updatedAt: Date.now()
-                }, { merge: true });
-            } catch (err) {
-                console.error("Save to Cloud Error:", err);
-            }
-        };
-
-        window.showLogin = function() {
+        function showLogin() {
             document.getElementById('loginView').classList.remove('hidden');
             document.getElementById('appView').classList.add('hidden');
-        };
+        }
 
-        window.handleLogin = function() {
+        function handleLogin() {
             const input = document.getElementById('usernameInput').value.trim();
             if (!input) return alert("กรุณาระบุ USERNAME");
-            window.loginAs(input.toUpperCase());
-        };
+            loginAs(input.toUpperCase());
+        }
 
-        window.loginAs = function(username) {
-            window.currentUser = username;
+        function loginAs(username) {
+            currentUser = username;
             localStorage.setItem("COUNT_DEFECT_CURRENT_USER", username);
             document.getElementById('displayUsername').innerText = username;
+            
+            // 1. Instant Local Load (0.1s)
+            const userKey = `COUNT_DEFECT_DATA_${username}`;
+            const localData = localStorage.getItem(userKey);
+            areas = localData ? JSON.parse(localData) : [];
 
             document.getElementById('loginView').classList.add('hidden');
             document.getElementById('appView').classList.remove('hidden');
+            
+            // Render local UI instantly
+            renderUI();
 
-            window.subscribeToCloud(username);
-        };
+            // 2. Start Background Cloud Sync
+            startCloudSync();
+        }
 
-        window.handleLogout = function() {
+        function handleLogout() {
             if (confirm("ต้องการออกจากระบบหรือไม่?")) {
-                if (window.unsubscribeSnapshot) {
-                    window.unsubscribeSnapshot();
-                }
+                if (syncInterval) clearInterval(syncInterval);
                 localStorage.removeItem("COUNT_DEFECT_CURRENT_USER");
-                window.currentUser = null;
-                window.areas = [];
-                window.showLogin();
+                currentUser = null;
+                areas = [];
+                showLogin();
                 document.getElementById('usernameInput').value = '';
             }
-        };
+        }
 
-        // Render Main UI Component
-        window.render = function() {
+        // Cloud Background Synchronization
+        function startCloudSync() {
+            if (syncInterval) clearInterval(syncInterval);
+            pullFromCloud(); // Initial background pull
+            syncInterval = setInterval(pullFromCloud, 3000); // Poll every 3s
+        }
+
+        async function pullFromCloud() {
+            if (!currentUser || isSyncing) return;
+            try {
+                const res = await fetch(getCloudUrl(currentUser));
+                if (res.ok) {
+                    const cloudData = await res.json();
+                    if (cloudData && Array.isArray(cloudData)) {
+                        const cloudStr = JSON.stringify(cloudData);
+                        const localStr = JSON.stringify(areas);
+                        if (cloudStr !== localStr) {
+                            areas = cloudData;
+                            localStorage.setItem(`COUNT_DEFECT_DATA_${currentUser}`, cloudStr);
+                            renderUI();
+                        }
+                    }
+                    updateStatus('ซิงค์แล้ว', 'text-emerald-600 bg-emerald-50 border-emerald-200');
+                }
+            } catch (e) {
+                updateStatus('ออฟไลน์', 'text-amber-600 bg-amber-50 border-amber-200');
+            }
+        }
+
+        async function pushToCloud() {
+            if (!currentUser) return;
+            const dataStr = JSON.stringify(areas);
+            // Always save locally first
+            localStorage.setItem(`COUNT_DEFECT_DATA_${currentUser}`, dataStr);
+
+            try {
+                isSyncing = true;
+                updateStatus('กำลังบันทึก...', 'text-blue-600 bg-blue-50 border-blue-200');
+                await fetch(getCloudUrl(currentUser), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: dataStr
+                });
+                updateStatus('ซิงค์แล้ว', 'text-emerald-600 bg-emerald-50 border-emerald-200');
+            } catch (e) {
+                updateStatus('บันทึกในเครื่องแล้ว', 'text-amber-600 bg-amber-50 border-amber-200');
+            } finally {
+                isSyncing = false;
+            }
+        }
+
+        function updateStatus(text, classes) {
+            const badge = document.getElementById('syncStatusBadge');
+            if (badge) {
+                badge.innerText = text;
+                badge.className = `text-[10px] px-2 py-0.5 rounded-full font-medium border ${classes}`;
+            }
+        }
+
+        function saveDataAndRender() {
+            renderUI();
+            pushToCloud();
+        }
+
+        // Render UI Controller
+        function renderUI() {
             const container = document.getElementById('areaList');
-            if (!container) return;
             container.innerHTML = '';
 
-            if (window.areas.length === 0) {
+            if (areas.length === 0) {
                 container.innerHTML = `
                     <div class="text-center py-16 text-slate-400">
                         <i data-lucide="layers" class="w-12 h-12 mx-auto mb-2 stroke-[1.5]"></i>
@@ -283,16 +242,15 @@
                 return;
             }
 
-            window.areas.forEach(area => {
-                // ช่องที่ 2: รวมจำนวนทั้งหมดจากช่องที่ 5 ของหัวข้อย่อย
-                const totalSum = area.defects.reduce((sum, d) => sum + (Number(d.total) || 0), 0); 
-                // ช่องที่ 3: รวมจำนวนเก็บแล้วทั้งหมดจากช่องที่ 6 ของหัวข้อย่อย
-                const totalCompletedSum = area.defects.reduce((sum, d) => sum + (Number(d.completed) || 0), 0); 
+            areas.forEach(area => {
+                // ช่องที่ 2: รวมจำนวนทั้งหมดของหัวข้อย่อย
+                const totalSum = area.defects.reduce((sum, d) => sum + d.total, 0); 
+                // ช่องที่ 3: รวมจำนวนเก็บแล้วทั้งหมด
+                const totalCompletedSum = area.defects.reduce((sum, d) => sum + d.completed, 0); 
 
                 const areaCard = document.createElement('div');
                 areaCard.className = "bg-white border-2 border-slate-900 rounded-xl overflow-hidden shadow-sm";
 
-                // Header Layout (ช่องที่ 1 | ช่องที่ 2 | ช่องที่ 3)
                 const headerHtml = `
                     <div class="p-3 border-b-2 border-slate-900">
                         <div class="grid grid-cols-12 gap-2 text-center font-bold">
@@ -315,21 +273,21 @@
                         <!-- Control icons under header -->
                         <div class="flex items-center justify-between mt-2 px-1">
                             <div class="flex items-center space-x-3">
-                                <button onclick="toggleExpandArea(${area.id})" title="ซ่อน/แสดง" class="p-1 hover:bg-slate-100 rounded">
+                                <button onclick="toggleExpandArea(${area.id})" class="p-1 hover:bg-slate-100 rounded">
                                     <i data-lucide="${area.isExpanded ? 'chevron-up' : 'chevron-down'}" class="w-6 h-6 text-slate-900 stroke-[3]"></i>
                                 </button>
                                 ${area.isExpanded ? `
-                                    <button onclick="openModal('defect', ${area.id})" title="เพิ่ม Defect" class="p-1 text-slate-900 hover:bg-slate-100 rounded">
+                                    <button onclick="openModal('defect', ${area.id})" class="p-1 text-slate-900 hover:bg-slate-100 rounded">
                                         <i data-lucide="plus" class="w-5 h-5 stroke-[3]"></i>
                                     </button>
                                 ` : ''}
                             </div>
 
                             <div class="flex items-center space-x-2">
-                                <button onclick="openModal('editArea', ${area.id})" title="แก้ไขชื่อพื้นที่" class="p-1 text-slate-700 hover:text-slate-900">
+                                <button onclick="openModal('editArea', ${area.id})" class="p-1 text-slate-700 hover:text-slate-900">
                                     <i data-lucide="pencil" class="w-4 h-4 stroke-[2.5]"></i>
                                 </button>
-                                <button onclick="deleteArea(${area.id})" title="ลบพื้นที่" class="p-1 text-rose-600 hover:text-rose-800">
+                                <button onclick="deleteArea(${area.id})" class="p-1 text-rose-600 hover:text-rose-800">
                                     <i data-lucide="trash-2" class="w-4 h-4 stroke-[2.5]"></i>
                                 </button>
                             </div>
@@ -337,7 +295,6 @@
                     </div>
                 `;
 
-                // Expanded Content (รายการย่อย ช่องที่ 4, 5, 6, 7)
                 let defectsHtml = '';
                 if (area.isExpanded) {
                     if (area.defects.length === 0) {
@@ -348,7 +305,7 @@
                             const remaining = Math.max(0, defect.total - defect.completed);
 
                             defectsHtml += `
-                                <div class="bg-white border-2 border-slate-800 rounded-lg p-3 space-y-2 shadow-xs">
+                                <div class="bg-white border-2 border-slate-800 rounded-lg p-3 space-y-2">
                                     <!-- ช่องที่ 4: ชื่อหัวข้อ -->
                                     <div class="border-2 border-slate-800 rounded p-1.5 text-xs font-bold text-slate-800 text-center bg-slate-50">
                                         ${defect.name}
@@ -363,15 +320,12 @@
 
                                     <!-- Grid Boxes: ช่องที่ 5 | ช่องที่ 6 | ช่องที่ 7 -->
                                     <div class="grid grid-cols-3 gap-2 text-center">
-                                        <!-- ช่องที่ 5: ทั้งหมด -->
                                         <div class="border-2 border-slate-800 rounded-md p-1.5 font-bold text-sm bg-white flex items-center justify-center">
                                             ${defect.total}
                                         </div>
-                                        <!-- ช่องที่ 6: เก็บแล้ว -->
                                         <div class="border-2 border-slate-800 rounded-md p-1.5 font-bold text-sm bg-white text-emerald-600 flex items-center justify-center">
                                             ${defect.completed}
                                         </div>
-                                        <!-- ช่องที่ 7: คงเหลือ -->
                                         <div class="border-2 border-slate-800 rounded-md p-1.5 font-bold text-sm bg-white text-rose-600 flex items-center justify-center">
                                             ${remaining}
                                         </div>
@@ -379,30 +333,25 @@
 
                                     <!-- Action Row -->
                                     <div class="grid grid-cols-3 gap-2 text-center pt-1 items-center">
-                                        <!-- ปุ่มแก้ไข/ลบ -->
                                         <div class="flex items-center justify-center space-x-2">
-                                            <button onclick="openModal('editDefect', ${area.id}, ${defect.id})" title="แก้ไข" class="text-slate-700 hover:text-slate-900">
+                                            <button onclick="openModal('editDefect', ${area.id}, ${defect.id})" class="text-slate-700 hover:text-slate-900">
                                                 <i data-lucide="pencil" class="w-4 h-4 stroke-[2.5]"></i>
                                             </button>
-                                            <button onclick="deleteDefect(${area.id}, ${defect.id})" title="ลบ" class="text-rose-600 hover:text-rose-800">
+                                            <button onclick="deleteDefect(${area.id}, ${defect.id})" class="text-rose-600 hover:text-rose-800">
                                                 <i data-lucide="trash-2" class="w-4 h-4 stroke-[2.5]"></i>
                                             </button>
                                         </div>
 
-                                        <!-- ปุ่ม + เพิ่มจำนวนเก็บแล้ว -->
                                         <div class="flex justify-center">
                                             <button onclick="incrementCompleted(${area.id}, ${defect.id})" 
-                                                ${defect.completed >= defect.total ? 'disabled' : ''}
-                                                class="w-8 h-8 rounded-full border-2 border-slate-900 bg-white hover:bg-slate-100 flex items-center justify-center active:scale-95 transition disabled:opacity-30 disabled:cursor-not-allowed">
+                                                class="w-8 h-8 rounded-full border-2 border-slate-900 bg-white hover:bg-slate-100 flex items-center justify-center active:scale-95 transition">
                                                 <i data-lucide="plus" class="w-5 h-5 text-slate-900 stroke-[3]"></i>
                                             </button>
                                         </div>
 
-                                        <!-- ปุ่ม - ลดจำนวนเก็บแล้ว -->
                                         <div class="flex justify-center">
                                             <button onclick="decrementCompleted(${area.id}, ${defect.id})" 
-                                                ${defect.completed <= 0 ? 'disabled' : ''}
-                                                class="w-8 h-8 rounded-full border-2 border-slate-900 bg-white hover:bg-slate-100 flex items-center justify-center active:scale-95 transition disabled:opacity-30 disabled:cursor-not-allowed">
+                                                class="w-8 h-8 rounded-full border-2 border-slate-900 bg-white hover:bg-slate-100 flex items-center justify-center active:scale-95 transition">
                                                 <i data-lucide="minus" class="w-5 h-5 text-slate-900 stroke-[3]"></i>
                                             </button>
                                         </div>
@@ -419,69 +368,57 @@
             });
 
             lucide.createIcons();
-        };
+        }
 
-        // Area Expand Toggle
-        window.toggleExpandArea = function(areaId) {
-            const area = window.areas.find(a => a.id === areaId);
+        // Event Handlers
+        function toggleExpandArea(areaId) {
+            const area = areas.find(a => a.id === areaId);
             if (area) {
                 area.isExpanded = !area.isExpanded;
-                window.render();
+                saveDataAndRender();
             }
-        };
+        }
 
-        // Delete Area
-        window.deleteArea = function(areaId) {
+        function deleteArea(areaId) {
             if (confirm("ยืนยันการลบพื้นที่นี้และข้อมูลทั้งหมด?")) {
-                window.areas = window.areas.filter(a => a.id !== areaId);
-                window.saveToCloud();
-                window.render();
+                areas = areas.filter(a => a.id !== areaId);
+                saveDataAndRender();
             }
-        };
+        }
 
-        // Delete Defect Item
-        window.deleteDefect = function(areaId, defectId) {
+        function deleteDefect(areaId, defectId) {
             if (confirm("ยืนยันการลบรายการ Defect นี้?")) {
-                const area = window.areas.find(a => a.id === areaId);
+                const area = areas.find(a => a.id === areaId);
                 if (area) {
                     area.defects = area.defects.filter(d => d.id !== defectId);
-                    window.saveToCloud();
-                    window.render();
+                    saveDataAndRender();
                 }
             }
-        };
+        }
 
-        // Increment Completed Count
-        window.incrementCompleted = function(areaId, defectId) {
-            const area = window.areas.find(a => a.id === areaId);
+        function incrementCompleted(areaId, defectId) {
+            const area = areas.find(a => a.id === areaId);
             const defect = area ? area.defects.find(d => d.id === defectId) : null;
-            if (defect) {
-                if (defect.completed < defect.total) {
-                    defect.completed += 1;
-                    window.saveToCloud();
-                    window.render();
-                }
+            if (defect && defect.completed < defect.total) {
+                defect.completed += 1;
+                saveDataAndRender();
             }
-        };
+        }
 
-        // Decrement Completed Count
-        window.decrementCompleted = function(areaId, defectId) {
-            const area = window.areas.find(a => a.id === areaId);
+        function decrementCompleted(areaId, defectId) {
+            const area = areas.find(a => a.id === areaId);
             const defect = area ? area.defects.find(d => d.id === defectId) : null;
-            if (defect) {
-                if (defect.completed > 0) {
-                    defect.completed -= 1;
-                    window.saveToCloud();
-                    window.render();
-                }
+            if (defect && defect.completed > 0) {
+                defect.completed -= 1;
+                saveDataAndRender();
             }
-        };
+        }
 
-        // Modal Controller
-        window.openModal = function(target, areaId = null, defectId = null) {
-            window.currentModalTarget = target;
-            window.selectedAreaId = areaId;
-            window.selectedDefectId = defectId;
+        // Modal Handlers
+        function openModal(target, areaId = null, defectId = null) {
+            currentModalTarget = target;
+            selectedAreaId = areaId;
+            selectedDefectId = defectId;
 
             const modal = document.getElementById('inputModal');
             const title = document.getElementById('modalTitle');
@@ -495,14 +432,14 @@
             if (target === 'area') {
                 title.innerText = "เพิ่มพื้นที่ใหม่";
             } else if (target === 'editArea') {
-                const area = window.areas.find(a => a.id === areaId);
+                const area = areas.find(a => a.id === areaId);
                 title.innerText = "แก้ไขชื่อพื้นที่";
                 if (area) inputText.value = area.name;
             } else if (target === 'defect') {
                 title.innerText = "เพิ่มรายการ Defect";
                 inputNum.classList.remove('hidden');
             } else if (target === 'editDefect') {
-                const area = window.areas.find(a => a.id === areaId);
+                const area = areas.find(a => a.id === areaId);
                 const defect = area ? area.defects.find(d => d.id === defectId) : null;
                 title.innerText = "แก้ไขรายการ Defect";
                 inputNum.classList.remove('hidden');
@@ -514,33 +451,33 @@
 
             modal.classList.remove('hidden');
             setTimeout(() => inputText.focus(), 100);
-        };
+        }
 
-        window.closeModal = function() {
+        function closeModal() {
             document.getElementById('inputModal').classList.add('hidden');
-            window.currentModalTarget = null;
-            window.selectedAreaId = null;
-            window.selectedDefectId = null;
-        };
+            currentModalTarget = null;
+            selectedAreaId = null;
+            selectedDefectId = null;
+        }
 
-        window.submitModal = function() {
+        function submitModal() {
             const textVal = document.getElementById('modalInputText').value.trim();
             const numVal = parseInt(document.getElementById('modalInputNumber').value) || 0;
 
             if (!textVal) return alert("กรุณาระบุข้อมูลให้ครบถ้วน");
 
-            if (window.currentModalTarget === 'area') {
-                window.areas.push({
+            if (currentModalTarget === 'area') {
+                areas.push({
                     id: Date.now(),
                     name: textVal,
                     isExpanded: true,
                     defects: []
                 });
-            } else if (window.currentModalTarget === 'editArea') {
-                const area = window.areas.find(a => a.id === window.selectedAreaId);
+            } else if (currentModalTarget === 'editArea') {
+                const area = areas.find(a => a.id === selectedAreaId);
                 if (area) area.name = textVal;
-            } else if (window.currentModalTarget === 'defect') {
-                const area = window.areas.find(a => a.id === window.selectedAreaId);
+            } else if (currentModalTarget === 'defect') {
+                const area = areas.find(a => a.id === selectedAreaId);
                 if (area) {
                     area.defects.push({
                         id: Date.now(),
@@ -549,9 +486,9 @@
                         completed: 0
                     });
                 }
-            } else if (window.currentModalTarget === 'editDefect') {
-                const area = window.areas.find(a => a.id === window.selectedAreaId);
-                const defect = area ? area.defects.find(d => d.id === window.selectedDefectId) : null;
+            } else if (currentModalTarget === 'editDefect') {
+                const area = areas.find(a => a.id === selectedAreaId);
+                const defect = area ? area.defects.find(d => d.id === selectedDefectId) : null;
                 if (defect) {
                     defect.name = textVal;
                     defect.total = numVal;
@@ -561,10 +498,9 @@
                 }
             }
 
-            window.saveToCloud();
-            window.closeModal();
-            window.render();
-        };
+            closeModal();
+            saveDataAndRender();
+        }
     </script>
 </body>
 </html>
