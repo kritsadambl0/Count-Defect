@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>COUNT DEFECT</title>
+    <!-- iOS Web App Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="COUNT DEFECT">
+    
+    <!-- Tailwind CSS & Lucide Icons -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { -webkit-tap-highlight-color: transparent; }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans antialiased min-h-screen">
+
+    <!-- View 0: LOGIN SCREEN -->
+    <div id="loginView" class="min-h-screen flex flex-col items-center justify-center p-6 bg-white">
+        <div class="w-full max-w-xs space-y-8 text-center">
+            <h1 class="text-2xl font-black tracking-widest text-slate-900 uppercase">COUNT DEFECT</h1>
+            <h2 class="text-xl font-bold tracking-wider text-slate-700">LOGIN</h2>
+            
+            <div class="space-y-4 pt-4">
+                <input type="text" id="usernameInput" placeholder="USERNAME" 
+                    class="w-full px-4 py-3 text-center border-2 border-slate-800 rounded-lg text-lg font-semibold placeholder:text-slate-400 uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-slate-800">
+                
+                <button onclick="handleLogin()" 
+                    class="w-14 h-14 bg-white border-2 border-slate-800 rounded-full flex items-center justify-center mx-auto hover:bg-slate-50 active:scale-95 transition shadow-sm">
+                    <i data-lucide="check" class="w-8 h-8 text-slate-900 stroke-[3]"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- View 1: HOME SCREEN -->
+    <div id="appView" class="hidden min-h-screen flex flex-col">
+        <!-- Header -->
+        <header class="bg-white border-b border-slate-200 sticky top-0 z-30 px-4 py-3">
+            <div class="max-w-md mx-auto flex justify-between items-center">
+                <h1 class="text-lg font-black tracking-wider text-slate-900">COUNT DEFECT</h1>
+                
+                <!-- Top Right: User Account Profile -->
+                <button onclick="handleLogout()" class="flex items-center space-x-1.5 text-xs font-bold text-slate-700 hover:text-rose-600 transition">
+                    <i data-lucide="user-circle-2" class="w-6 h-6"></i>
+                    <span id="displayUsername" class="uppercase">USERNAME</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Body -->
+        <main class="max-w-md w-full mx-auto p-4 flex-1">
+            <!-- Home Title & Add Area Button -->
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-2xl font-black tracking-wider text-slate-900">HOME</h2>
+                <button onclick="openModal('area')" class="p-1 hover:bg-slate-200 rounded-lg transition active:scale-95">
+                    <i data-lucide="plus" class="w-8 h-8 text-slate-900 stroke-[2.5]"></i>
+                </button>
+            </div>
+
+            <!-- Building/Area Cards Container -->
+            <div id="areaList" class="space-y-4">
+                <!-- Dynamic Area Content -->
+            </div>
+        </main>
+    </div>
+
+    <!-- Center Modal Dialog -->
+    <div id="inputModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-xs rounded-2xl p-5 shadow-2xl border-2 border-slate-900 space-y-4">
+            <h3 id="modalTitle" class="text-base font-bold text-slate-900 text-center">ระบุข้อมูล</h3>
+            
+            <div id="modalBody" class="space-y-3">
+                <input type="text" id="modalInputText" placeholder="ชื่อรายการ..." class="w-full px-3 py-2 border-2 border-slate-300 rounded-lg text-sm text-slate-800 font-medium focus:outline-none focus:border-slate-800">
+                <input type="number" id="modalInputNumber" placeholder="จำนวนทั้งหมด (ช่องที่ 5)" min="0" class="hidden w-full px-3 py-2 border-2 border-slate-300 rounded-lg text-sm text-slate-800 font-medium focus:outline-none focus:border-slate-800">
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 pt-2">
+                <button onclick="closeModal()" class="py-2 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold border border-slate-300 hover:bg-slate-200 active:scale-95">ยกเลิก</button>
+                <button onclick="submitModal()" class="py-2 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 active:scale-95">ตกลง</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State Management
+        let currentUser = null;
+        let areas = [];
+
+        let currentModalTarget = null; // 'area', 'editArea', 'defect', 'editDefect'
+        let selectedAreaId = null;
+        let selectedDefectId = null;
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const savedUser = localStorage.getItem("COUNT_DEFECT_CURRENT_USER");
+            if (savedUser) {
+                loginAs(savedUser);
+            } else {
+                showLogin();
+            }
+        });
+
+        // Login / User Isolation
+        function handleLogin() {
+            const input = document.getElementById('usernameInput').value.trim();
+            if (!input) return alert("กรุณาระบุ USERNAME");
+            loginAs(input.toUpperCase());
+        }
+
+        function loginAs(username) {
+            currentUser = username;
+            localStorage.setItem("COUNT_DEFECT_CURRENT_USER", username);
+            document.getElementById('displayUsername').innerText = username;
+            
+            // Load Isolated Data per Username
+            const userKey = `COUNT_DEFECT_DATA_${username}`;
+            const data = localStorage.getItem(userKey);
+            areas = data ? JSON.parse(data) : [];
+
+            document.getElementById('loginView').classList.add('hidden');
+            document.getElementById('appView').classList.remove('hidden');
+            render();
+        }
+
+        function handleLogout() {
+            if (confirm("ต้องการออกจากระบบหรือไม่?")) {
+                localStorage.removeItem("COUNT_DEFECT_CURRENT_USER");
+                currentUser = null;
+                areas = [];
+                document.getElementById('loginView').classList.remove('hidden');
+                document.getElementById('appView').classList.add('hidden');
+                document.getElementById('usernameInput').value = '';
+            }
+        }
+
+        function saveData() {
+            if (currentUser) {
+                localStorage.setItem(`COUNT_DEFECT_DATA_${currentUser}`, JSON.stringify(areas));
+            }
+        }
+
+        // Render Controller
+        function render() {
+            saveData();
+            const container = document.getElementById('areaList');
+            container.innerHTML = '';
+
+            if (areas.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-16 text-slate-400">
+                        <i data-lucide="layers" class="w-12 h-12 mx-auto mb-2 stroke-[1.5]"></i>
+                        <p class="text-sm font-medium">ยังไม่มีข้อมูลพื้นที่</p>
+                        <p class="text-xs mt-1">กดปุ่ม + ด้านบนเพื่อเพิ่มพื้นที่ใหม่</p>
+                    </div>
+                `;
+                lucide.createIcons();
+                return;
+            }
+
+            areas.forEach(area => {
+                const totalDefectCategories = area.defects.length; // ช่องที่ 2
+                const totalCompletedSum = area.defects.reduce((sum, d) => sum + d.completed, 0); // ช่องที่ 3
+
+                const areaCard = document.createElement('div');
+                areaCard.className = "bg-white border-2 border-slate-900 rounded-xl overflow-hidden shadow-sm";
+
+                // Header Layout (ช่องที่ 1 | ช่องที่ 2 | ช่องที่ 3)
+                const headerHtml = `
+                    <div class="p-3 border-b-2 border-slate-900">
+                        <div class="grid grid-cols-12 gap-2 text-center font-bold">
+                            <!-- ช่องที่ 1: ชื่อพื้นที่ -->
+                            <div class="col-span-6 border-2 border-slate-800 rounded-md p-1.5 flex items-center justify-center bg-slate-50 text-xs truncate">
+                                ${area.name}
+                            </div>
+                            <!-- ช่องที่ 2: รวมจำนวนหัวข้อ -->
+                            <div class="col-span-3 border-2 border-slate-800 rounded-md p-1.5 flex flex-col justify-center items-center bg-slate-50 text-xs">
+                                <span class="text-[10px] text-slate-500 font-normal">หัวข้อ</span>
+                                <span>${totalDefectCategories}</span>
+                            </div>
+                            <!-- ช่องที่ 3: รวมเก็บแล้วทั้งหมด -->
+                            <div class="col-span-3 border-2 border-slate-800 rounded-md p-1.5 flex flex-col justify-center items-center bg-slate-50 text-xs text-emerald-600">
+                                <span class="text-[10px] text-slate-500 font-normal">เก็บแล้ว</span>
+                                <span>${totalCompletedSum}</span>
+                            </div>
+                        </div>
+
+                        <!-- Control icons under header -->
+                        <div class="flex items-center justify-between mt-2 px-1">
+                            <div class="flex items-center space-x-3">
+                                <button onclick="toggleExpandArea(${area.id})" class="p-1 hover:bg-slate-100 rounded">
+                                    <i data-lucide="${area.isExpanded ? 'chevron-up' : 'chevron-down'}" class="w-6 h-6 text-slate-900 stroke-[3]"></i>
+                                </button>
+                                ${area.isExpanded ? `
+                                    <button onclick="openModal('defect', ${area.id})" class="p-1 text-slate-900 hover:bg-slate-100 rounded">
+                                        <i data-lucide="plus" class="w-5 h-5 stroke-[3]"></i>
+                                    </button>
+                                ` : ''}
+                            </div>
+
+                            <div class="flex items-center space-x-2">
+                                <button onclick="openModal('editArea', ${area.id})" class="p-1 text-slate-700 hover:text-slate-900">
+                                    <i data-lucide="pencil" class="w-4 h-4 stroke-[2.5]"></i>
+                                </button>
+                                <button onclick="deleteArea(${area.id})" class="p-1 text-rose-600 hover:text-rose-800">
+                                    <i data-lucide="trash-2" class="w-4 h-4 stroke-[2.5]"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Expanded Content (รายการ ช่องที่ 4, 5, 6, 7)
+                let defectsHtml = '';
+                if (area.isExpanded) {
+                    if (area.defects.length === 0) {
+                        defectsHtml = `<div class="p-4 text-center text-xs text-slate-400">ยังไม่มีหัวข้อ Defect (กด + เพื่อเพิ่ม)</div>`;
+                    } else {
+                        defectsHtml = `<div class="p-3 space-y-3 bg-slate-50">`;
+                        area.defects.forEach(defect => {
+                            const remaining = Math.max(0, defect.total - defect.completed); // ช่องที่ 7
+
+                            defectsHtml += `
+                                <div class="bg-white border-2 border-slate-800 rounded-lg p-3 space-y-2">
+                                    <!-- ช่องที่ 4: ชื่อหัวข้อ -->
+                                    <div class="border-2 border-slate-800 rounded p-1.5 text-xs font-bold text-slate-800 text-center bg-slate-50">
+                                        ${defect.name}
+                                    </div>
+
+                                    <!-- Label Header -->
+                                    <div class="grid grid-cols-3 gap-2 text-center text-[10px] font-bold text-slate-600">
+                                        <div>ทั้งหมด</div>
+                                        <div>เก็บแล้ว</div>
+                                        <div>คงเหลือ</div>
+                                    </div>
+
+                                    <!-- Grid Boxes: ช่องที่ 5 | ช่องที่ 6 | ช่องที่ 7 -->
+                                    <div class="grid grid-cols-3 gap-2 text-center">
+                                        <!-- ช่องที่ 5: ทั้งหมด -->
+                                        <div class="border-2 border-slate-800 rounded-md p-1.5 font-bold text-sm bg-white flex items-center justify-center">
+                                            ${defect.total}
+                                        </div>
+                                        <!-- ช่องที่ 6: เก็บแล้ว -->
+                                        <div class="border-2 border-slate-800 rounded-md p-1.5 font-bold text-sm bg-white text-emerald-600 flex items-center justify-center">
+                                            ${defect.completed}
+                                        </div>
+                                        <!-- ช่องที่ 7: คงเหลือ -->
+                                        <div class="border-2 border-slate-800 rounded-md p-1.5 font-bold text-sm bg-white text-rose-600 flex items-center justify-center">
+                                            ${remaining}
+                                        </div>
+                                    </div>
+
+                                    <!-- Action Row (ใต้ ช่องที่ 5, 6, 7) -->
+                                    <div class="grid grid-cols-3 gap-2 text-center pt-1 items-center">
+                                        <!-- ใต้ช่องที่ 5: ปุ่มแก้ไข/ลบ -->
+                                        <div class="flex items-center justify-center space-x-2">
+                                            <button onclick="openModal('editDefect', ${area.id}, ${defect.id})" class="text-slate-700 hover:text-slate-900">
+                                                <i data-lucide="pencil" class="w-4 h-4 stroke-[2.5]"></i>
+                                            </button>
+                                            <button onclick="deleteDefect(${area.id}, ${defect.id})" class="text-rose-600 hover:text-rose-800">
+                                                <i data-lucide="trash-2" class="w-4 h-4 stroke-[2.5]"></i>
+                                            </button>
+                                        </div>
+
+                                        <!-- ใต้ช่องที่ 6: ปุ่ม + เพิ่มจำนวนเก็บแล้ว -->
+                                        <div class="flex justify-center">
+                                            <button onclick="incrementCompleted(${area.id}, ${defect.id})" 
+                                                class="w-8 h-8 rounded-full border-2 border-slate-900 bg-white hover:bg-slate-100 flex items-center justify-center active:scale-95 transition">
+                                                <i data-lucide="plus" class="w-5 h-5 text-slate-900 stroke-[3]"></i>
+                                            </button>
+                                        </div>
+
+                                        <!-- ใต้ช่องที่ 7: ปุ่ม - ลดจำนวนเก็บแล้ว (เพิ่มคงเหลือ) -->
+                                        <div class="flex justify-center">
+                                            <button onclick="decrementCompleted(${area.id}, ${defect.id})" 
+                                                class="w-8 h-8 rounded-full border-2 border-slate-900 bg-white hover:bg-slate-100 flex items-center justify-center active:scale-95 transition">
+                                                <i data-lucide="minus" class="w-5 h-5 text-slate-900 stroke-[3]"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        defectsHtml += `</div>`;
+                    }
+                }
+
+                areaCard.innerHTML = headerHtml + defectsHtml;
+                container.appendChild(areaCard);
+            });
+
+            lucide.createIcons();
+        }
+
+        // Area Functions
+        function toggleExpandArea(areaId) {
+            const area = areas.find(a => a.id === areaId);
+            if (area) {
+                area.isExpanded = !area.isExpanded;
+                render();
+            }
+        }
+
+        function deleteArea(areaId) {
+            if (confirm("ยืนยันการลบพื้นที่นี้และข้อมูลทั้งหมด?")) {
+                areas = areas.filter(a => a.id !== areaId);
+                render();
+            }
+        }
+
+        function deleteDefect(areaId, defectId) {
+            if (confirm("ยืนยันการลบรายการ Defect นี้?")) {
+                const area = areas.find(a => a.id === areaId);
+                if (area) {
+                    area.defects = area.defects.filter(d => d.id !== defectId);
+                    render();
+                }
+            }
+        }
+
+        // Calculation Rules (ช่องที่ 5, 6, 7)
+        function incrementCompleted(areaId, defectId) {
+            const area = areas.find(a => a.id === areaId);
+            const defect = area ? area.defects.find(d => d.id === defectId) : null;
+            if (defect) {
+                // เพิ่มเก็บแล้วได้ไม่เกินจำนวนทั้งหมด (ช่องที่ 5)
+                if (defect.completed < defect.total) {
+                    defect.completed += 1;
+                    render();
+                }
+            }
+        }
+
+        function decrementCompleted(areaId, defectId) {
+            const area = areas.find(a => a.id === areaId);
+            const defect = area ? area.defects.find(d => d.id === defectId) : null;
+            if (defect) {
+                // ลดเก็บแล้วได้ไม่เกิน 0
+                if (defect.completed > 0) {
+                    defect.completed -= 1;
+                    render();
+                }
+            }
+        }
+
+        // Modal Handlers
+        function openModal(target, areaId = null, defectId = null) {
+            currentModalTarget = target;
+            selectedAreaId = areaId;
+            selectedDefectId = defectId;
+
+            const modal = document.getElementById('inputModal');
+            const title = document.getElementById('modalTitle');
+            const inputText = document.getElementById('modalInputText');
+            const inputNum = document.getElementById('modalInputNumber');
+
+            inputText.value = '';
+            inputNum.value = '';
+            inputNum.classList.add('hidden');
+
+            if (target === 'area') {
+                title.innerText = "เพิ่มพื้นที่ใหม่ (ช่องที่ 1)";
+            } else if (target === 'editArea') {
+                const area = areas.find(a => a.id === areaId);
+                title.innerText = "แก้ไขชื่อพื้นที่";
+                if (area) inputText.value = area.name;
+            } else if (target === 'defect') {
+                title.innerText = "เพิ่มรายการ Defect";
+                inputNum.classList.remove('hidden');
+            } else if (target === 'editDefect') {
+                const area = areas.find(a => a.id === areaId);
+                const defect = area ? area.defects.find(d => d.id === defectId) : null;
+                title.innerText = "แก้ไขรายการ Defect";
+                inputNum.classList.remove('hidden');
+                if (defect) {
+                    inputText.value = defect.name;
+                    inputNum.value = defect.total;
+                }
+            }
+
+            modal.classList.remove('hidden');
+            setTimeout(() => inputText.focus(), 100);
+        }
+
+        function closeModal() {
+            document.getElementById('inputModal').classList.add('hidden');
+            currentModalTarget = null;
+            selectedAreaId = null;
+            selectedDefectId = null;
+        }
+
+        function submitModal() {
+            const textVal = document.getElementById('modalInputText').value.trim();
+            const numVal = parseInt(document.getElementById('modalInputNumber').value) || 0;
+
+            if (!textVal) return alert("กรุณาระบุข้อมูลให้ครบถ้วน");
+
+            if (currentModalTarget === 'area') {
+                areas.push({
+                    id: Date.now(),
+                    name: textVal,
+                    isExpanded: true,
+                    defects: []
+                });
+            } else if (currentModalTarget === 'editArea') {
+                const area = areas.find(a => a.id === selectedAreaId);
+                if (area) area.name = textVal;
+            } else if (currentModalTarget === 'defect') {
+                const area = areas.find(a => a.id === selectedAreaId);
+                if (area) {
+                    area.defects.push({
+                        id: Date.now(),
+                        name: textVal,
+                        total: numVal,
+                        completed: 0
+                    });
+                }
+            } else if (currentModalTarget === 'editDefect') {
+                const area = areas.find(a => a.id === selectedAreaId);
+                const defect = area ? area.defects.find(d => d.id === selectedDefectId) : null;
+                if (defect) {
+                    defect.name = textVal;
+                    defect.total = numVal;
+                    if (defect.completed > defect.total) {
+                        defect.completed = defect.total;
+                    }
+                }
+            }
+
+            closeModal();
+            render();
+        }
+    </script>
+</body>
+</html>
