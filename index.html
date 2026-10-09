@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>COUNT DEFECT</title>
+    <!-- iOS Web App Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="COUNT DEFECT">
+    
+    <!-- Tailwind CSS for UI Styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans antialiased selection:bg-blue-200">
+
+    <!-- Header Navigation -->
+    <header class="sticky top-0 z-50 bg-blue-600 text-white shadow-md">
+        <div class="max-w-md mx-auto px-4 py-3 flex justify-between items-center">
+            <button id="homeBtn" onclick="navToHome()" class="flex items-center space-x-1 bg-blue-700 hover:bg-blue-800 text-xs font-bold px-3 py-1.5 rounded-lg transition">
+                <i data-lucide="home" class="w-4 h-4"></i>
+                <span>HOME</span>
+            </button>
+            <h1 id="headerTitle" class="text-base font-bold tracking-wide">COUNT DEFECT</h1>
+            <div id="headerAction">
+                <button onclick="promptAddBuilding()" class="p-1 hover:bg-blue-700 rounded-full transition">
+                    <i data-lucide="plus-circle" class="w-6 h-6"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-md mx-auto p-4 pb-20">
+        
+        <!-- View 1: Home (Buildings & Areas List) -->
+        <div id="homeView" class="space-y-4">
+            <div id="buildingList" class="space-y-3">
+                <!-- Dynamic Building Cards Will Be Rendered Here -->
+            </div>
+        </div>
+
+        <!-- View 2: Area Defect Detail -->
+        <div id="areaView" class="hidden space-y-4">
+            <div class="flex justify-between items-center bg-white p-3 rounded-xl shadow-sm border border-slate-200">
+                <span id="currentAreaName" class="font-bold text-slate-700 text-sm flex items-center">
+                    <i data-lucide="map-pin" class="w-4 h-4 text-orange-500 mr-1.5"></i>
+                    <span>-</span>
+                </span>
+                <button onclick="promptAddDefect()" class="flex items-center space-x-1 bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700 transition">
+                    <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                    <span>เพิ่ม Defect</span>
+                </button>
+            </div>
+
+            <div id="defectList" class="space-y-3">
+                <!-- Dynamic Defect Cards Will Be Rendered Here -->
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // Data Structure
+        let state = {
+            currentView: 'home', // 'home' or 'area'
+            selectedBuildingId: null,
+            selectedAreaId: null,
+            buildings: [
+                {
+                    id: 1,
+                    name: "อาคาร A",
+                    isExpanded: true,
+                    areas: [
+                        { id: 101, name: "ชั้น 1 - โถงรับรอง", defects: [] },
+                        { id: 102, name: "ชั้น 2 - ห้องพัก 201", defects: [] }
+                    ]
+                }
+            ]
+        };
+
+        // Initialize App
+        document.addEventListener("DOMContentLoaded", () => {
+            render();
+            lucide.createIcons();
+        });
+
+        // Save & Load Local Storage
+        function saveState() {
+            localStorage.setItem("COUNT_DEFECT_DATA", JSON.stringify(state.buildings));
+        }
+
+        function loadState() {
+            const data = localStorage.getItem("COUNT_DEFECT_DATA");
+            if (data) {
+                state.buildings = JSON.parse(data);
+            }
+        }
+        loadState();
+
+        // Render Controller
+        function render() {
+            saveState();
+            if (state.currentView === 'home') {
+                document.getElementById('homeView').classList.remove('hidden');
+                document.getElementById('areaView').classList.add('hidden');
+                document.getElementById('headerTitle').innerText = "COUNT DEFECT";
+                document.getElementById('headerAction').innerHTML = `
+                    <button onclick="promptAddBuilding()" class="p-1 hover:bg-blue-700 rounded-full transition">
+                        <i data-lucide="plus-circle" class="w-6 h-6"></i>
+                    </button>
+                `;
+                renderBuildings();
+            } else {
+                document.getElementById('homeView').classList.add('hidden');
+                document.getElementById('areaView').classList.remove('hidden');
+                
+                const building = state.buildings.find(b => b.id === state.selectedBuildingId);
+                const area = building ? building.areas.find(a => a.id === state.selectedAreaId) : null;
+                
+                if (area) {
+                    document.getElementById('headerTitle').innerText = building.name;
+                    document.getElementById('currentAreaName').innerHTML = `
+                        <i data-lucide="map-pin" class="w-4 h-4 text-orange-500 mr-1.5"></i>
+                        <span>${area.name}</span>
+                    `;
+                    renderDefects(area.defects);
+                }
+            }
+            lucide.createIcons();
+        }
+
+        // Navigation Actions
+        function navToHome() {
+            state.currentView = 'home';
+            state.selectedBuildingId = null;
+            state.selectedAreaId = null;
+            // Expand all by default when returning Home
+            state.buildings.forEach(b => b.isExpanded = true);
+            render();
+        }
+
+        function navToArea(buildingId, areaId) {
+            state.selectedBuildingId = buildingId;
+            state.selectedAreaId = areaId;
+            state.currentView = 'area';
+            render();
+        }
+
+        // Building Functions
+        function toggleBuilding(buildingId) {
+            const building = state.buildings.find(b => b.id === buildingId);
+            if (building) {
+                building.isExpanded = !building.isExpanded;
+                render();
+            }
+        }
+
+        function promptAddBuilding() {
+            const name = prompt("กรอกชื่ออาคารใหม่:");
+            if (name && name.trim() !== "") {
+                state.buildings.push({
+                    id: Date.now(),
+                    name: name.trim(),
+                    isExpanded: true,
+                    areas: []
+                });
+                render();
+            }
+        }
+
+        function promptAddArea(buildingId, event) {
+            event.stopPropagation();
+            const name = prompt("กรอกชื่อพื้นที่/ห้อง:");
+            if (name && name.trim() !== "") {
+                const building = state.buildings.find(b => b.id === buildingId);
+                if (building) {
+                    building.areas.push({
+                        id: Date.now(),
+                        name: name.trim(),
+                        defects: []
+                    });
+                    building.isExpanded = true;
+                    render();
+                }
+            }
+        }
+
+        // Defect Functions
+        function promptAddDefect() {
+            const name = prompt("กรอกชื่อรายการ Defect:");
+            if (name && name.trim() !== "") {
+                const building = state.buildings.find(b => b.id === state.selectedBuildingId);
+                const area = building ? building.areas.find(a => a.id === state.selectedAreaId) : null;
+                if (area) {
+                    area.defects.push({
+                        id: Date.now(),
+                        name: name.trim(),
+                        total: 0,
+                        completed: 0,
+                        isEditing: false,
+                        isConfirmed: false,
+                        tempInput: 0
+                    });
+                    render();
+                }
+            }
+        }
+
+        function toggleEditTotal(defectId) {
+            const defects = getActiveDefects();
+            const defect = defects.find(d => d.id === defectId);
+            if (defect) {
+                defect.isEditing = !defect.isEditing;
+                defect.tempInput = defect.total;
+                render();
+            }
+        }
+
+        function confirmTotal(defectId) {
+            const defects = getActiveDefects();
+            const defect = defects.find(d => d.id === defectId);
+            const inputVal = parseInt(document.getElementById(`input-total-${defectId}`).value) || 0;
+            
+            if (defect && inputVal >= 0) {
+                defect.total = inputVal;
+                if (defect.completed > defect.total) {
+                    defect.completed = defect.total;
+                }
+                defect.isConfirmed = true;
+                defect.isEditing = false;
+                render();
+            }
+        }
+
+        function incrementCompleted(defectId) {
+            const defects = getActiveDefects();
+            const defect = defects.find(d => d.id === defectId);
+            if (defect && defect.isConfirmed && defect.completed < defect.total) {
+                defect.completed += 1;
+                render();
+            }
+        }
+
+        function decrementCompleted(defectId) {
+            const defects = getActiveDefects();
+            const defect = defects.find(d => d.id === defectId);
+            if (defect && defect.isConfirmed && defect.completed > 0) {
+                defect.completed -= 1;
+                render();
+            }
+        }
+
+        function getActiveDefects() {
+            const building = state.buildings.find(b => b.id === state.selectedBuildingId);
+            const area = building ? building.areas.find(a => a.id === state.selectedAreaId) : null;
+            return area ? area.defects : [];
+        }
+
+        // DOM Renderers
+        function renderBuildings() {
+            const container = document.getElementById('buildingList');
+            container.innerHTML = '';
+
+            state.buildings.forEach(b => {
+                const card = document.createElement('div');
+                card.className = "bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden";
+
+                const header = document.createElement('div');
+                header.className = "flex justify-between items-center p-3.5 bg-slate-50 border-b border-slate-100 cursor-pointer select-none";
+                header.onclick = () => toggleBuilding(b.id);
+
+                header.innerHTML = `
+                    <span class="font-bold text-slate-800 text-sm">${b.name}</span>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="promptAddArea(${b.id}, event)" class="text-blue-600 hover:text-blue-800 p-1">
+                            <i data-lucide="plus-circle" class="w-5 h-5"></i>
+                        </button>
+                        <i data-lucide="${b.isExpanded ? 'chevron-up' : 'chevron-down'}" class="w-5 h-5 text-slate-400"></i>
+                    </div>
+                `;
+
+                card.appendChild(header);
+
+                if (b.isExpanded) {
+                    const areaList = document.createElement('div');
+                    areaList.className = "divide-y divide-slate-100";
+
+                    if (b.areas.length === 0) {
+                        areaList.innerHTML = `<div class="p-3 text-xs text-slate-400 text-center">ยังไม่มีพื้นที่ กด + เพื่อเพิ่ม</div>`;
+                    } else {
+                        b.areas.forEach(a => {
+                            const areaItem = document.createElement('div');
+                            areaItem.className = "p-3 pl-5 flex items-center justify-between hover:bg-slate-50 cursor-pointer text-xs font-medium text-slate-700 transition";
+                            areaItem.onclick = () => navToArea(b.id, a.id);
+                            areaItem.innerHTML = `
+                                <div class="flex items-center space-x-2">
+                                    <i data-lucide="mappin" class="w-3.5 h-3.5 text-orange-500"></i>
+                                    <span>${a.name}</span>
+                                </div>
+                                <i data-lucide="chevron-right" class="w-4 h-4 text-slate-300"></i>
+                            `;
+                            areaList.appendChild(areaItem);
+                        });
+                    }
+                    card.appendChild(areaList);
+                }
+
+                container.appendChild(card);
+            });
+        }
+
+        function renderDefects(defects) {
+            const container = document.getElementById('defectList');
+            container.innerHTML = '';
+
+            if (defects.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-10 text-slate-400">
+                        <i data-lucide="clipboard-list" class="w-12 h-12 mx-auto mb-2 stroke-1"></i>
+                        <p class="text-xs">ยังไม่มีรายการ Defect ในพื้นที่นี้</p>
+                    </div>
+                `;
+                return;
+            }
+
+            defects.forEach(d => {
+                const remaining = Math.max(0, d.total - d.completed);
+                const canAdd = d.isConfirmed && d.completed < d.total;
+                const canSub = d.isConfirmed && d.completed > 0;
+
+                const card = document.createElement('div');
+                card.className = "bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-3";
+
+                let box1Content = '';
+                if (d.isEditing) {
+                    box1Content = `
+                        <input id="input-total-${d.id}" type="number" value="${d.tempInput}" min="0" class="w-full text-center border border-slate-300 rounded p-1 text-sm font-bold my-1 focus:outline-blue-500">
+                        <button onclick="confirmTotal(${d.id})" class="w-full bg-blue-600 text-white text-[10px] py-1 rounded font-semibold hover:bg-blue-700">ยืนยัน</button>
+                    `;
+                } else {
+                    box1Content = `<div class="text-xl font-bold text-slate-800 py-1">${d.total}</div>`;
+                }
+
+                card.innerHTML = `
+                    <div class="text-sm font-bold text-slate-800">${d.name}</div>
+                    
+                    <div class="grid grid-cols-3 gap-2 text-center">
+                        <!-- ช่องที่ 1: ทั้งหมด -->
+                        <div class="bg-slate-50 p-2 rounded-lg border border-slate-100 flex flex-col justify-between relative">
+                            <div class="flex justify-end">
+                                <button onclick="toggleEditTotal(${d.id})" class="text-slate-400 hover:text-orange-500">
+                                    <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                                </button>
+                            </div>
+                            ${box1Content}
+                            <span class="text-[10px] text-slate-400 font-medium">ทั้งหมด</span>
+                        </div>
+
+                        <!-- ช่องที่ 2: เก็บแล้ว -->
+                        <div class="bg-slate-50 p-2 rounded-lg border border-slate-100 flex flex-col justify-between items-center">
+                            <span class="text-[10px] font-bold text-slate-600">เก็บแล้ว</span>
+                            <div class="text-xl font-bold text-emerald-600 my-1">${d.completed}</div>
+                            <button onclick="incrementCompleted(${d.id})" ${!canAdd ? 'disabled' : ''} 
+                                class="p-1 rounded-full transition ${canAdd ? 'text-emerald-600 hover:bg-emerald-50 active:scale-95' : 'text-slate-300 opacity-50 cursor-not-allowed'}">
+                                <i data-lucide="plus-circle" class="w-6 h-6"></i>
+                            </button>
+                        </div>
+
+                        <!-- ช่องที่ 3: คงเหลือ -->
+                        <div class="bg-slate-50 p-2 rounded-lg border border-slate-100 flex flex-col justify-between items-center">
+                            <span class="text-[10px] font-bold text-slate-600">คงเหลือ</span>
+                            <div class="text-xl font-bold text-rose-600 my-1">${remaining}</div>
+                            <button onclick="decrementCompleted(${d.id})" ${!canSub ? 'disabled' : ''} 
+                                class="p-1 rounded-full transition ${canSub ? 'text-rose-600 hover:bg-rose-50 active:scale-95' : 'text-slate-300 opacity-50 cursor-not-allowed'}">
+                                <i data-lucide="minus-circle" class="w-6 h-6"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+        }
+    </script>
+</body>
+</html>
